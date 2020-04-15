@@ -1,0 +1,193 @@
+import random
+import pandas as pd
+import nltk
+from dfply import *
+from nltk.corpus import stopwords 
+from nltk.stem import LancasterStemmer
+from nltk.util import ngrams
+from flask import Flask, request, abort
+from flask import jsonify
+import json
+from flask import make_response
+import sys
+
+app = Flask(__name__)
+
+pd.options.display.max_colwidth = 15000
+stop_words = list(stopwords.words('english'))
+lancaster = LancasterStemmer()
+punctuations = list('''!()-[]{};:'"\,<>./?@#$%^&*_~''')
+GREETING_INPUTS = ("hello" , "hi" , "greetings" , "hey" , "sup" , "ssup","yo", "dude", "bro")
+GREETING_RESPONSE = ["Hi!", "Hey!", "*nods*", "Hi there!", "Hello", "I am glad! You are talking to me", "Wassup"]
+
+Final = pd.read_excel("Final.xlsx")
+Final['top'] = Final['Topic']
+Final['subtop'] = Final['Sub_Topic']
+Final['Sub_Topic'] = Final['Sub_Topic'].apply(nltk.word_tokenize)
+Final['Topic'] = Final['Topic'].apply(nltk.word_tokenize)
+
+var = []
+var_s = []
+bigram = []
+trigram = []
+bigram1 = []
+trigram1 = []
+answer=[]
+topic = []
+subtopic = []
+
+# 1  INPUT
+def greeting(sentence):
+    for word in sentence.split():
+        if word.lower() in GREETING_INPUTS:
+            return random.choice(GREETING_RESPONSE)+",My name is Niki, I am your policy wiki, How can I help you..."
+        
+
+# Stemming convert to sub_topic        
+def inp_format(user_response):
+    df = pd.DataFrame({'Words':nltk.word_tokenize(str(user_response))})
+    df2 = (df >> 
+           filter_by(~X.Words.isin(stop_words))>>
+           filter_by(~X.Words.isin(punctuations)))
+    for word in df2['Words']:
+            var.append(lancaster.stem(word))
+
+    print ("before")
+    print (var)
+    check_topic()
+            
+        
+
+        
+#2  TOPIC DETECTION
+
+def check_topic():
+    for idx, points in enumerate(Final.Topic):
+       
+        if(set(var) & set(points)):
+            print ("-------============-=============-----------")
+            topic.append(Final.top[idx])
+            print(Final.top[idx])
+            print ("====================")
+            print (var)
+            print ("====================")
+            for value in nltk.word_tokenize(Final.top[idx]):
+                var.remove(value)
+            print ("input for sub")
+            print ("====================")
+            print (var)
+            print ("====================")
+            check_subtopic()
+            break
+    else:
+        print ("Sorry Im not able to answer your query, I have raised a ticket for the same. Thank you!")
+        
+
+
+
+def check_subtopic():
+    for idx, points in enumerate(Final.Sub_Topic[Final.top == (''.join(topic))]):
+        print ("--------------var--------------")
+        print (var)
+        print ("--------------points--------------")
+        print (points)
+        if(set(var) & set(points)):
+            subtopic.append(points)
+            print ("FINAL TOPIC")
+            print (Final.subtop)
+            print ("FINAL TOPIC")
+            print (points)
+            print (Final.subtop == (' '.join(points)))
+            print (Final.Answer)
+            Ans = (str(Final.Answer[Final.subtop == (' '.join(points))]))
+           # print(Final.subtop[idx])
+            print (Ans)
+            answer.append(Ans)
+            print ("________________-----------------------_________________________")
+            break
+    else:
+         print ("Are you looking for one of this?")
+         f='Are you looking for one of this?\n'
+         i=0
+        # print ("{}{}}{}{}{}"+''.join(topic))
+         for word in Final.SubTopics[Final.top == (''.join(topic))]:
+               print (word)
+               f=f+str(i)+'-'+word+'\n'
+               i+=1
+         print ("*********************8")
+         print (f)    
+         answer.append(f)
+         #inp_Sub()
+        
+
+        
+            
+#4 INPUT FOR SUB TOPIC
+
+
+def inp_2():
+    check_subtopic()
+
+        
+@app.route('/hook', methods=['POST'])
+def jj():
+     print (request.json)
+     req = request.get_json(silent=True, force=True)
+     print ("----##########"+req.get('queryResult').get('queryText'))
+     var.clear()
+     var_s.clear()
+     bigram.clear()
+     trigram.clear()
+     bigram.clear()
+     trigram1.clear()
+     bigram1.clear()
+     topic.clear()
+     subtopic.clear()
+    
+     user_response = req.get('queryResult').get('queryText')
+     flag=True
+     if req.get('queryResult').get('queryText') in GREETING_INPUTS:
+         print("ROBO: My name is Robo. I will answer your queries about Chatbots. If you want to exit, type Bye!")
+
+         user_response=user_response.lower()
+         res = json.dumps({"fulfillmentText": user_response}, indent=4)
+    
+     if(user_response!='bye'):
+        if(user_response=='thanks' or user_response=='thank you' ):
+            flag=False
+            print("ROBO: You are welcome..")
+        elif(greeting(user_response)!=None):
+                print("ROBO: "+greeting(user_response))
+        else:
+            print("ROBO: ",end="")
+            print ("nNNNNNNNNNNNNNNNNNNNNN"+user_response)
+            inp_format(user_response)
+            print ("<><><><><"+''.join(answer))
+            print (answer)
+            ann=answer[len(answer)-1]
+            res = json.dumps({"fulfillmentText": ann.replace('Name: Answer, dtype: object','')}, indent=4)
+            r = make_response(res)
+            return r
+           
+     else:
+        res = json.dumps({"fulfillmentText": "Bye bye"}, indent=4)
+        r = make_response(res)
+        return r
+        #flag=False
+        #print("ROBO: Bye! take care..")
+
+     #res = json.dumps({"fulfillmentText": "Test"}, indent=4)
+     r = make_response(res)
+     return r
+
+               
+         
+     res = json.dumps({"fulfillmentText": "My name is Robo. I will answer your queries about Chatbots. If you want to exit, type Bye!"}, indent=4)
+     r = make_response(res)
+     user_response = req.get('queryResult').get('queryText')
+     return r
+
+
+
+if __name__ == '__main__':
+    app.run()
